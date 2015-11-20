@@ -1,0 +1,86 @@
+Introduction to Markov Chains
+========================================================
+
+Named after Andrey Markov (1856-1922), a Markov chain models a system with a certain number of states and the probability of going from some state $i$ to some other state $j$ does not depend on the history of the system.
+
+The canonical example: Weather in the Land of Oz. This example seems to have appeared as early as 1957 in [Introduction to Finite Mathematics](http://books.google.com.tr/books?ei=ObZ2UvnNOcqq4ASzk4HwAw&hl=tr&id=JrC0AAAAIAAJ&dq=land+of+oz+markov+chain&focus=searchwithinvolume&q=%22land+of+oz%22) by John G. Kemeny. In the Land of Oz, there are no two fair days in a row, any fair day is followed either by a rainy or a snowy day. And a rainy or snowy day is followed mostly by another rainy or snowy day. The probabilities of each outcome is a function of today's weather can be summarized by a transition matrix.
+
+```{r}
+transitionMatrix <- matrix( c(0.5,0.25,0.25, 0.5,0,0.5, 0.25,0.25,0.5), ncol=3, byrow=T )
+colnames(transitionMatrix) <- c("rain","fair","snow") # weather tomorrow
+rownames(transitionMatrix) <- c("rain","fair","snow") # weather today
+transitionMatrix
+```
+
+Note that if we know the weather is rainy today, the probability that it will be fair tomorrow is given by `(c(1,0,0) %*% transitionMatrix)[,"fair"]` = `r (c(1,0,0) %*% transitionMatrix)[,"fair"]`.
+
+Now let us imagine we want to compute the probabilities of a given outcome for $n$ days later. For this, we need matrix multiplication, or more generally matrix power operation. How do we do that in R? _expm_ package offers a solution. (_Generic R Hint_: to find out how to do something in R, try the _sos_ package. ex: `library("sos"); findFn("{matrix power}")`)
+
+```{r message=FALSE}
+library("expm")
+for (i in seq(1,7)) {
+  print(transitionMatrix %^% i) }
+```
+
+Interestingly enough we find that today's weather has no effect on the long-term predictions of weather in the Land of Oz. Sadly only 20% of the time we get fair weather.
+
+
+#### Random Walk ####
+
+Random walk (also called drunkard's walk) is an example of a Markov chain. The random walk question was posed as early as 1905 by Karl Pearson in a letter to Nature (and received responses from people like Lord Rayleigh).
+
+Now let's do an example random walk in R. We will make use of the `cumsum()` function which returns a vector of the cumulative sums of elements in its input. For example, `cumsum(c(1,2,3,4))=`(`r cumsum(c(1,2,3,4))`).
+
+```{r fig.width=7, fig.height=4}
+set.seed(12)
+steps <- round(runif(50))*2-1
+position <- c(0,cumsum(steps))  # we are starting at position = 0
+par(mar=c(4,4,0,0)) # adjust margins of the plot
+plot(position,type='l',col="red")
+```
+
+
+#### Ehrenfest Urn Model ####
+
+Markov chain with transition matrix: $P_{i,i-1} = i/m$, $P_{i,i+1} = 1-i/m$, with all other entries 0. Read more about it [here](http://www.math.uah.edu/stat/markov/Ehrenfest.html). The model is based on a 1907 paper by Paul and Tatyana Ehrenfest.
+
+
+#### Metropolis-Hastings ####
+
+Generating Gaussian distributed random numbers with Metropolis-Hastings algo.
+
+```{r fig.width=7, fig.height=4}
+# generate normal distributed random numbers with M-H algo
+metropGauss <- function(n=10000,eps=0.5) {
+  vec <- vector("numeric", n)
+  x <- 0
+  vec[1] <- x
+  for (i in 2:n) {
+    cand <- x+runif(1,-eps,eps)
+    if (runif(1) < min(1,dnorm(cand)/dnorm(x))) x <- cand
+    vec[i] <- x  }
+  vec
+}
+
+# do a normal fit to data and plot the histogram and the fit function
+fitAndPlotNorm <- function(n) {
+  library("MASS")
+  fitresult <- fitdistr(n,"normal")
+  ff <- function(x) dnorm(x,fitresult$estimate["mean"],fitresult$estimate["sd"])
+  hist(n,probability=T)
+  curve(ff,min(n),max(n),add=T)
+  fitresult
+}
+
+fitAndPlotNorm(metropGauss())
+```
+
+#### Fun Trivia ####
+- Weather channel has been running a weather at the Land of Oz [webpage](http://www.weather.com/weather/right-now/landofoz) to advertise the Disney movie "Oz The Great And Powerful". Sadly they don't seem to provide any "forecasts".
+- John G. Kemeny was one of the two original developers of the BASIC programming language in 1964.
+
+
+#### Exercise Ideas ####
+- Implement a 2D version of the random walk. Can you produce its animation with R?
+- Derive the value of the $n$^th power of the transition matrix for the weather in the Land of Oz example, when $n\rightarrow\infty$. _Hint:_ Write the matrix as a product of the eigenvector matrix, a diagonal matrix of eigenvalues and the inverse of the eigenvector matrix.
+- What are the eigenvalues of the transition matrix? Do all such stochastic matrices have one eigenvalue that is exactly equal to 1? Search and learn.
