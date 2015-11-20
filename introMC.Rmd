@@ -1,0 +1,104 @@
+Intro to MC with R
+===================
+
+The most basic and common examples of Monte Carlo techniques are the estimation of $\pi$ and numerical integration.
+
+
+Computation of $\pi$
+--------------------
+
+The idea is to generate a pair of uniform random numbers, $x$ and $y$, between 0 and 1, and then check how often $x^2+y^2<1$. This would give us the ratio of the area of a quarter cirle of unit radius to the area of a square with unit-length sides, $\pi/4=$ `r pi/4`.
+
+So here is the R code for this task:
+
+```{r fig.width=4, fig.height=4}
+# a function to return pi/4, niter = number of iterations (ie. points)
+piover4 <- function(niter=10000, plotPoints=FALSE) {
+  x <- runif(niter)
+  y <- runif(niter)
+  if (plotPoints) { # optionally plot the generated (x,y) pairs
+    par(mar=c(4,4,0,0)); plot(x,y,pch='.',col=ifelse(x^2+y^2<1,"red","blue"),asp=1) }
+  sum((x^2+y^2)<1) / niter }
+
+piover4(plotPoints=TRUE)
+```
+
+Given that this is a ``random" technique, you might wonder how much does the result vary. For example what is the standard deviation of the result obtained by this technique. For this we can try the following piece of code.
+
+```{r fig.width=7, fig.height=3}
+results <- sapply(rep(10000,1000),piover4) # repeat the experiment 1000 times
+par(mar=c(4,4,0,0)) # we don't need the empty space at the top and on the right-hand side
+hist(results,main="")
+```
+
+The mean and the standard deviation of these results are `r mean(results)` and `r sd(results)`, respectively. Imagine we wanted to get the uncertainty down to $10^{-3}$ level. Based on all these values, what could be the minimum `niter`?
+
+
+Numerical Integration
+---------------------
+
+Consider a function $f(x)$. What is its expected value, given the probability density of $x$, $p(x)$? The answer is straightforward: $\int_{-\infty}^{\infty} f(x)p(x)\,dx$. Now let us imagine we wanted to integrate $f(x)$ from $a$ to $b$. If we choose $p(x)$ to be a uniform pdf between $a$ and $b$, then the expected value would give us the required integral divided by $(b-a)$.
+
+According to the _law of large numbers_, the sample average of large number of trials converges to the expected value. Therefore we have a straightforward way to integrate any given function. For example:
+
+```{r}
+# an R function to integrate an arbitrary function f
+integ <- function(f,a,b,ntrial=10000) {
+  u <- runif(ntrial,min(a,b),max(a,b)) # uniform rand numbers between a & b
+  mean(f(u))*(b-a) # 1/(b-a) is the normalization for p(x)
+}
+y <- function(x) (sin(x))^2
+integ(y,pi,0)
+```
+
+You can compare this result with R's own integrate function.
+```{r}
+integrate(y,pi,0)
+```
+
+What about the uncertainty in our calculation? The standard error of the mean is the standard deviation of the sample divided by $\sqrt{N}$. So it would be something like: `sqrt(var(f(u))/niter)*abs(b-a)` (be careful about the normalization!). In our example with 10k trials, this will be about `r sqrt(var(y(runif(10000,0,pi)))/10000)*pi`.
+
+
+### Importance Sampling ###
+
+But then we are tempted to ask ''Is there a way to get a smaller uncertainty?'' One method to reduce the error is the so called _importance sampling_.
+
+Consider we have a random variable $w$, whose pdf is $p(w)$. The expected value of $f(w)/p(w)$ is going to be: $\int_{-\infty}^{\infty} f(w)/p(w)\cdot p(w)\,dw$. Hence if it is easy to generate random numbers according to $p(w)$ within the range $a$ to $b$, and if it is easy to integrate $p(w)$ within that same range, and if $p(w)$ is similar to our function $f$, we can reduce our integration uncertainty.
+
+Below we have an example of this, the above integration (this time from 0 to $\pi$) will be reperformed first using the uniform pdf (replicating the above results) and then we will use a Gaussian pdf. Gaussian density and distribution functions, and methods to generate Gaussian-distributed values are readily available in R. Please note that this is for demonstration purposes only, I have not explicity tested whether the Gaussian pdf version is computationally more efficient or not.
+
+```{r fig.width=7, fig.height=3, tidy=FALSE}
+y <- function(x) (sin(x))^2    # function to integrate, f(w) (same as above the example)
+z <- function(x) dnorm(x,1.6,0.6)   # our "easy-to-compute" pdf, p(w)
+par(mar=c(4,5,0.5,0))
+curve(y,0,3.14,col="blue",ylab="")
+curve(z,0,3.14,add=T,col="red")  # observe that the shapes are similar
+legend("topright",legend=c(expression({sin^2}(x)),"N(1.6,0.6)"),col=c("blue","red"), lty=1)
+u <- runif(10e3,0,pi) # uniformly distributed random numbers between 0 to pi
+n <- rnorm(10e3,1.6,0.6) # Gaussian distributed random numbers (following the z function)
+m<-n[n<pi & n>0] # pick only those numbers within the integration range
+Nn <- pnorm(pi,1.6,0.6) - pnorm(0,1.6,0.6) # normalization factor (integral z from 0 to pi)
+ydivz <- y(m)/dnorm(m,1.6,0.6) # f(w)/p(w)
+resu <- mean(y(u))*pi
+erru <- sqrt(var(y(u))/10e3)*pi  # estimated uncertainty in the experiment
+resn <- mean(ydivz)*Nn
+errn <- sqrt(var(ydivz)/length(m))*Nn  # estimated uncertainty in the experiment
+```
+
+  pdf    | result   | uncertainty
+  ----   | -------  | ----------
+uniform  | `r resu` | `r erru`
+Gaussian | `r resn` | `r errn`
+
+_Quick question_: What if $p(w)$ is not easily integrable in the relevant range? Well given that it is a pdf, its total integral is 1. Then we could estimate the normalization factor itself quite easily, right?
+
+```{r results="hold"}
+print(paste("Actual normalization=",Nn))
+print(paste("An estimate for the normalization=",length(m)/length(n)))
+```
+
+
+### Some Exercises ###
+* Can you reproduce with R the average dice value vs. number of rolls plot that can be seen on [wikipedia](http://en.wikipedia.org/wiki/Law_of_large_numbers "Wikipedia Law of Large Numbers")?
+* Can you modify the `integ` function so that it takes a target error level instead of the number of trials?
+* Using the _microbenchmark_ package in R (or the `system.time()` function), check which of the two integrations described in the Importance Sampling section is more efficient for the same level of uncertainty in the result.
